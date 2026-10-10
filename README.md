@@ -81,21 +81,8 @@ npx skills update dotnet-sonar-qube -g
 npx skills remove dotnet-sonar-qube -g
 ```
 
+Após atualizar, inicie uma nova sessão do agente para carregar as instruções atualizadas.
+
 Para instalação por projeto, use `npx skills update dotnet-sonar-qube -p` e `npx skills remove dotnet-sonar-qube` na raiz dele. Se clonou manualmente, atualize com `git -C <pasta-da-skill> pull --ff-only`; para remover, exclua essa pasta.
 
 Se você adicionou uma instrução sobre a skill a um `CLAUDE.md`, `AGENTS.md` ou arquivo equivalente, remova-a ao desinstalar no escopo correspondente. Preserve instruções compartilhadas com agentes que continuam usando a skill.
-
-## Desenvolvimento e referências
-
-```sh
-python3 -m unittest discover -s tests -v
-```
-
-Para testar também um build real, com SDK .NET 8 e acesso ao NuGet, execute `python3 tests/smoke_build.py`. O teste cria um repositório temporário, verifica um aviso novo versus um preexistente e confirma o tratamento de falha de compilação; ele não usa o projeto em que você trabalha.
-
-- [Skills no Claude Code](https://code.claude.com/docs/en/skills)
-- [Skills no Codex](https://learn.chatgpt.com/docs/build-skills)
-- [CLI `skills`](https://github.com/vercel-labs/skills)
-- [SonarSource/sonar-dotnet](https://github.com/SonarSource/sonar-dotnet)
-
-Este projeto é uma integração independente; o analisador baixado mantém a licença e os termos publicados pela SonarSource no pacote NuGet.
