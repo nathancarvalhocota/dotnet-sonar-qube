@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+analyzer/analyzers/
+analyzer/*.nupkg

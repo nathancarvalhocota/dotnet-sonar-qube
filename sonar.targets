@@ -1,0 +1,5 @@
+<Project>
+  <ItemGroup Condition="'$(Language)' == 'C#'">
+    <Analyzer Include="$(MSBuildThisFileDirectory)analyzer/analyzers/*.dll" />
+  </ItemGroup>
+</Project>
