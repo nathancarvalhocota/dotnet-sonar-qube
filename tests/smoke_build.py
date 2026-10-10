@@ -1,18 +1,23 @@
 """Opt-in real .NET 8 build; creates only an isolated temporary repository."""
 
-import importlib.util
+import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
 def main():
     script = Path(__file__).resolve().parents[1] / "scripts" / "analyze.py"
-    spec = importlib.util.spec_from_file_location("analyze", script)
-    analyze = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(analyze)
     # Preserve the fixture/artifacts on failure so its build log can be inspected.
     repo = Path(tempfile.mkdtemp(prefix="sonar-build-smoke-"))
+
+    def analyze():
+        completed = subprocess.run([sys.executable, str(script), "--repo", str(repo),
+                                    "--target", "project with spaces/Demo.csproj"],
+                                   capture_output=True, text=True, encoding="utf-8")
+        assert completed.stdout, completed.stderr
+        return json.loads(completed.stdout), completed.returncode
 
     def run(*args):
         return subprocess.run(args, cwd=repo, check=True, capture_output=True)
@@ -38,7 +43,7 @@ def main():
     source.write_text(old + ('    public void NewIssue()\n    {\n'
                             '        throw new System.Exception("new");\n    }\n}\n'), encoding="utf-8")
     run("dotnet", "restore", str(csproj), "--ignore-failed-sources", "-nologo")
-    result, code = analyze.run_analysis(repo, target="project with spaces/Demo.csproj")
+    result, code = analyze()
     print(f"Fixture: {repo}\nArtifacts: {result.get('artifacts')}")
     assert code == 0, result
     assert any(item["rule"] == "S112" and item["line"] == 10 for item in result["findings"]), result
@@ -49,7 +54,7 @@ def main():
     print("PASS: real analyzer detects a new S112 and filters the unchanged issue")
 
     source.write_text("this is not valid C#", encoding="utf-8")
-    result, code = analyze.run_analysis(repo, target="project with spaces/Demo.csproj")
+    result, code = analyze()
     assert code == 1 and result["status"] == "build_failed" and result["errors"], result
     print("PASS: compilation errors return build_failed instead of a clean analysis")
 

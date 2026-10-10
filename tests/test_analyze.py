@@ -2,8 +2,10 @@
 
 import importlib.util
 import io
+import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -79,6 +81,12 @@ class GitRangesTests(unittest.TestCase):
     def test_missing_base_fails_instead_of_selecting_another(self):
         with self.assertRaises(RuntimeError):
             analyze.collect_ranges(self.repo, "does-not-exist")
+
+    def test_agent_invocation_returns_json_without_subcommands(self):
+        result = subprocess.run([sys.executable, str(SCRIPT), "--repo", str(self.repo)],
+                                capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["status"], "no_changed_lines")
 
 
 class FilterTests(unittest.TestCase):

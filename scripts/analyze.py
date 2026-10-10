@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local C# Sonar analysis of changed lines. Requires Python 3.10+, Git and .NET."""
+"""Internal helper for the dotnet-sonar-qube Agent Skill."""
 
 import argparse
 import json
@@ -165,33 +165,14 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
-    subcommands = parser.add_subparsers(dest="command", required=True)
-    for name in ("ranges", "run"):
-        command = subcommands.add_parser(name)
-        command.add_argument("--repo", type=Path, default=Path.cwd())
-        command.add_argument("--base", default="main")
-        command.add_argument("--exclude", action="append", default=[])
-        if name == "run":
-            command.add_argument("--target", help="Solution or project, relative to the Git root")
-            command.add_argument("--ignore-rule", action="append", default=[])
-    subcommands.add_parser("setup", help="Download the pinned analyzer without building a project")
-    command = subcommands.add_parser("filter", help="Filter an existing build log using ranges JSON")
-    command.add_argument("log", type=Path)
-    command.add_argument("ranges", type=Path)
-    command.add_argument("--ignore-rule", action="append", default=[])
+    parser.add_argument("--repo", type=Path, default=Path.cwd())
+    parser.add_argument("--base", default="main")
+    parser.add_argument("--target", help="Solution or project, relative to the Git root")
+    parser.add_argument("--exclude", action="append", default=[])
+    parser.add_argument("--ignore-rule", action="append", default=[])
     args = parser.parse_args()
     try:
-        if args.command == "ranges":
-            result = collect_ranges(args.repo, args.base, args.exclude)
-            code = 0
-        elif args.command == "setup":
-            result, code = {"analyzer_dir": str(setup_analyzer())}, 0
-        elif args.command == "filter":
-            ranges = json.loads(args.ranges.read_text(encoding="utf-8-sig"))
-            log = args.log.read_text(encoding="utf-8-sig", errors="replace")
-            result, code = {"findings": filter_diagnostics(log, ranges, args.ignore_rule)}, 0
-        else:
-            result, code = run_analysis(args.repo, args.base, args.exclude, args.ignore_rule, args.target)
+        result, code = run_analysis(args.repo, args.base, args.exclude, args.ignore_rule, args.target)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return code
     except (OSError, RuntimeError, ValueError, BadZipFile) as error:

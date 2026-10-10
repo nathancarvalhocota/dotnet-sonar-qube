@@ -7,11 +7,11 @@ Compara o estado atual com o merge base da referência escolhida, incluindo comm
 ## Escopo e requisitos
 
 - Projetos **C#/.NET** compiláveis com `dotnet build`; esta implementação não inclui analisadores para VB.NET, F#, JavaScript ou outras linguagens.
-- Git, Python **3.10+** (somente biblioteca padrão) e o SDK .NET exigido pelo projeto. Funciona por CLI em Windows, Linux e macOS, sem depender de Bash, `cygpath` ou IDE.
+- Git, Python **3.10+** (somente biblioteca padrão) e o SDK .NET exigido pelo projeto. Compatível com Windows, Linux e macOS, sem depender de Bash, `cygpath` ou IDE.
 - Rede para baixar `SonarAnalyzer.CSharp` do NuGet no primeiro uso e para restaurar as dependências do projeto, quando necessário.
 - Node.js/npm apenas se optar pela instalação com `npx skills`.
 
-O analisador tem a versão fixada em [analyzer/VERSION](analyzer/VERSION), inicialmente `10.34.0.3385`, preservando a versão da skill original. As DLLs e o pacote são baixados para a pasta da skill e não são distribuídos neste repositório. Atualizar a skill não atualiza automaticamente o analisador para a última versão do NuGet.
+O analisador tem a versão fixada em [analyzer/VERSION](analyzer/VERSION), atualmente `10.34.0.3385`. As DLLs e o pacote são baixados para a pasta da skill e reutilizados nas análises seguintes. Atualizar a skill não atualiza automaticamente o analisador para a última versão do NuGet.
 
 A skill usa o [analisador Roslyn da SonarSource](https://www.nuget.org/packages/SonarAnalyzer.CSharp/10.34.0.3385), sem precisar de servidor SonarQube, token ou envio de código. Ela não executa SonarScanner, não sincroniza quality profiles e não produz quality gates ou a análise completa do SonarQube Server/Cloud. As regras habilitadas dependem do analisador e da configuração local do projeto.
 
@@ -62,45 +62,17 @@ $dotnet-sonar-qube analise as linhas alteradas em relação a main
 
 Outros agentes: peça para carregar `dotnet-sonar-qube` e analisar a branch, ou informe o caminho de `SKILL.md` quando o agente não oferecer descoberta automática. Se necessário, reinicie a sessão para reconhecer a instalação.
 
-A execução permanece **sob demanda**: `disable-model-invocation: true` no Claude e `allow_implicit_invocation: false` em `agents/openai.yaml` no Codex. Não é necessário adicionar uma instrução automática ao `CLAUDE.md` ou `AGENTS.md`. Em agentes que não reconhecem essas opções, as instruções da skill também limitam a execução aos pedidos de análise.
+A execução é **sob demanda**: `disable-model-invocation: true` no Claude e `allow_implicit_invocation: false` em `agents/openai.yaml` no Codex. Não é necessário adicionar uma instrução automática ao `CLAUDE.md` ou `AGENTS.md`. Em agentes que não reconhecem essas opções, as instruções da skill também limitam a execução aos pedidos de análise.
 
-## Uso direto por CLI
+## Como funciona com o agente
 
-Na raiz Git do projeto que será analisado, substitua `<skill_dir>` pela pasta instalada. Em Windows, troque `python3` por `py -3` ou pelo comando Python disponível.
+O agente identifica a referência base (por padrão, `main`) e a solução ou projeto a compilar. Se houver linhas C# elegíveis, prepara o analisador automaticamente, executa o build e avalia os avisos encontrados nessas linhas. Você pode indicar outra referência, o projeto, exclusões e regras a silenciar no próprio pedido ao agente.
 
-```sh
-# Conferir os intervalos, sem baixar o analisador nem compilar
-python3 "<skill_dir>/scripts/analyze.py" ranges --base main
+O script interno cuida da coleta de intervalos, do download e da filtragem; o agente lê o código e as convenções do projeto para explicar os resultados. Arquivos `*.Designer.cs` são excluídos por padrão; nenhuma regra Sonar é silenciada por padrão.
 
-# Baixar o analisador fixado, sem compilar
-python3 "<skill_dir>/scripts/analyze.py" setup
+O arquivo [sonar.targets](sonar.targets) carrega a DLL da pasta da skill apenas durante aquele build, sem adicionar dependências ao `.csproj`. O próprio build pode executar tarefas customizadas e gerar arquivos; o agente deve informar efeitos observados e falhas de compilação.
 
-# Compilar e analisar as linhas alteradas
-python3 "<skill_dir>/scripts/analyze.py" run --base main
-
-# Escolher alvo, excluir arquivos e silenciar regras explicitamente
-python3 "<skill_dir>/scripts/analyze.py" run --base origin/main --target FinanceBot.sln --exclude 'src/Clients/**' --ignore-rule S1135 --ignore-rule S1125
-```
-
-`--repo <pasta>` seleciona outro repositório; `--target` é relativo à raiz Git dele. `--exclude` aceita pathspecs Git e pode ser repetido. Arquivos `*.Designer.cs` são excluídos por padrão; nenhuma regra Sonar é silenciada por padrão.
-
-O comando `run` usa `dotnet build --no-incremental --no-restore` e injeta [sonar.targets](sonar.targets) via `CustomBeforeMicrosoftCommonTargets`, habilitando os analisadores no build. Ele não adiciona `PackageReference` nem edita arquivos de configuração do projeto. Faça `dotnet restore` quando as dependências ainda não estiverem restauradas. O próprio build pode executar tarefas customizadas e gerar arquivos; confira o estado Git depois.
-
-O resultado é JSON e contém `status`, `findings`, contagens e a pasta temporária de artefatos (`ranges.json`, `build.log`, `result.json`). Sem linhas elegíveis, retorna `no_changed_lines` e não baixa nem compila. Build com falha retorna `build_failed` e código de saída 1; diagnóstico incompleto não deve ser apresentado como análise limpa.
-
-Para filtrar novamente um log existente:
-
-```sh
-python3 "<skill_dir>/scripts/analyze.py" filter "<artefatos>/build.log" "<artefatos>/ranges.json"
-```
-
-As ocorrências são deduplicadas por arquivo, linha, regra e mensagem. `.razor` entra nos intervalos, mas só aparece no relatório se o build emitir um diagnóstico Sonar mapeado ao arquivo original. Código gerado, regras desabilitadas, diagnósticos sem localização e arquivos fora do alvo compilado limitam a cobertura. A flag `git_status_changed` compara o status antes e depois do build; não detecta toda alteração de conteúdo em arquivos que já estavam modificados.
-
-## Migração da skill `sonar-qube`
-
-A skill antiga usava o comando `/sonar-qube`, caminhos fixos de `.claude`, Bash e preferências de um projeto específico. A nova se chama `dotnet-sonar-qube`, usa Python e resolve seus recursos pela própria pasta.
-
-Instale e valide a nova antes de remover a pasta antiga `~/.claude/skills/sonar-qube`. Se você usa as exclusões `src/Clients/**` ou as regras silenciadas `S1135`/`S1125`, passe-as explicitamente ou registre a preferência nas convenções do seu projeto. Esta instalação não remove nem modifica a skill antiga automaticamente.
+A análise cobre os diagnósticos emitidos pelo build nas linhas alteradas. `.razor` só aparece quando o compilador mapear o aviso Sonar ao arquivo original. Código gerado, regras desabilitadas e arquivos fora do alvo compilado limitam a cobertura.
 
 ## Atualizar e remover
 
